@@ -146,5 +146,9 @@ function sso($username, $ip, $agent, $sso_url, $sso_version = '', $sso_action = 
                 return $return_val;
             }
             break;
+        case 'logoff':
+            set_moodle_cookie('');
+            \core\session\manager::terminate_current();
+            break;
     }
 }
