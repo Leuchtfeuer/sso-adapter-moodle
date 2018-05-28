@@ -101,8 +101,8 @@ function sso($username, $ip, $agent, $sso_url, $sso_version = '', $sso_action = 
             $user->password    = randomPassword();
             $user->confirmed   = 1;
             $user->email       = $sso_userdata['email'];
-            $user->firstname   = $firstName;
-            $user->lastname    = $lastName;
+            $user->firstname   = $sso_userdata['first_name'] ?: '';
+            $user->lastname    = $sso_userdata['last_name'] ?: '';
             $user->phone1      = $sso_userdata['telephone'] ?: '';
             $user->address     = $sso_userdata['address'] ?: '';
             $user->city        = $sso_userdata['city'] ?: '';
@@ -145,6 +145,10 @@ function sso($username, $ip, $agent, $sso_url, $sso_version = '', $sso_action = 
                 $return_val = ['redirecturl' => $sso_url];
                 return $return_val;
             }
+            break;
+        case 'logoff':
+            set_moodle_cookie('');
+            \core\session\manager::terminate_current();
             break;
     }
 }
