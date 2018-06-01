@@ -48,7 +48,7 @@ include_once($moodle_sso['root'] . 'config.php');
 
 function sso($username, $ip, $agent, $sso_url, $sso_version = '', $sso_action = '', $sso_userdata = [])
 {
-    global $USER, $CFG;
+    global $USER, $CFG, $DB;
     $moodle_sso = $GLOBALS['moodle_sso'];
 
     if ($sso_version == '') {
@@ -101,8 +101,8 @@ function sso($username, $ip, $agent, $sso_url, $sso_version = '', $sso_action = 
             $user->password    = randomPassword();
             $user->confirmed   = 1;
             $user->email       = $sso_userdata['email'];
-            $user->firstname   = $sso_userdata['first_name'] ?: '';
-            $user->lastname    = $sso_userdata['last_name'] ?: '';
+            $user->firstname   = $firstName;
+            $user->lastname    = $lastName;
             $user->phone1      = $sso_userdata['telephone'] ?: '';
             $user->address     = $sso_userdata['address'] ?: '';
             $user->city        = $sso_userdata['city'] ?: '';
@@ -128,6 +128,57 @@ function sso($username, $ip, $agent, $sso_url, $sso_version = '', $sso_action = 
                     return ['Error' => $exception->getMessage()];
                 }
             }
+
+            $enrolledCourses = enrol_get_users_courses($user->id);
+            $enrolledIds = [];
+            if (!empty($sso_userdata['courses'])) {
+                $courses = explode(',', $sso_userdata['courses']);
+                for ($i = 0; $i < count($courses); $i++) {
+                    $courses[$i] = explode(':', $courses[$i]);
+                }
+
+                foreach ($courses as $courseAndRole) {
+                    $courseId = $courseAndRole[0];
+                    $roleId = $courseAndRole[1];
+                    $course = $DB->get_record('course', ['id' => $courseId], '*', MUST_EXIST);
+                    $context = context_course::instance($course->id);
+                    $assignedRoles = get_user_roles($context, $user->id);
+                    foreach ($assignedRoles as $role) {
+                        if ($role->roleid != $roleId) {
+                            role_unassign($role->roleid, $user->id, $context->id);
+                        }
+                    }
+                    $enrol = enrol_get_plugin('manual');
+                    $instances = enrol_get_instances($course->id, true);
+                    $manualinstance = null;
+                    foreach ($instances as $instance) {
+                        if ($instance->name == 'manual') {
+                            $manualinstance = $instance;
+                            break;
+                        }
+                    }
+                    $enrol->enrol_user($instance, $user->id, $roleId);
+                    $enrolledIds[] = $courseId;
+                }
+            }
+
+            foreach ($enrolledCourses as $course) {
+                if (!in_array($course->id, $enrolledIds)) {
+                    $courseId = $course->id;
+                    $course = $DB->get_record('course', ['id' => $courseId], '*', MUST_EXIST);
+                    $enrol = enrol_get_plugin('manual');
+                    $instances = enrol_get_instances($course->id, true);
+                    $manualinstance = null;
+                    foreach ($instances as $instance) {
+                        if ($instance->name == 'manual') {
+                            $manualinstance = $instance;
+                            break;
+                        }
+                    }
+                    $enrol->unenrol_user($instance, $user->id);
+                }
+            }
+
             unset($existingUser);
             unset($user);
             break;
